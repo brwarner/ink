@@ -47,7 +47,18 @@ namespace Ink.Runtime
         public void LoadJson(string json)
         {
             var jObject = SimpleJson.TextToDictionary (json);
-            LoadJsonObj(jObject);
+            LoadJsonObj(jObject, false);
+        }
+
+        /// <summary>
+        /// Loads a previously saved state in JSON format but preserves "global" state: variables, visit counts, etc.
+        /// In summary, only read the current callstack and evaluation context
+        /// </summary>
+        /// <param name="json">The JSON string to load.</param>
+        public void LoadJsonIgnoreGlobalState(string json)
+        {
+            var jObject = SimpleJson.TextToDictionary(json);
+            LoadJsonObj(jObject, true);
         }
 
         /// <summary>
@@ -513,7 +524,7 @@ namespace Ink.Runtime
         }
 
 
-        void LoadJsonObj(Dictionary<string, object> jObject)
+        void LoadJsonObj(Dictionary<string, object> jObject, bool ignoreGlobalState)
         {
 			object jSaveVersion = null;
 			if (!jObject.TryGetValue("inkSaveVersion", out jSaveVersion)) {
@@ -524,7 +535,10 @@ namespace Ink.Runtime
             }
 
             callStack.SetJsonToken ((Dictionary < string, object > )jObject ["callstackThreads"], story);
-            variablesState.SetJsonToken((Dictionary < string, object> )jObject["variablesState"]);
+
+            // Variables are global
+            if (!ignoreGlobalState)
+                variablesState.SetJsonToken((Dictionary < string, object> )jObject["variablesState"]);
 
             evaluationStack = Json.JArrayToRuntimeObjList ((List<object>)jObject ["evalStack"]);
 
@@ -538,19 +552,26 @@ namespace Ink.Runtime
                 var divertPath = new Path (currentDivertTargetPath.ToString ());
                 divertedPointer = story.PointerAtPath (divertPath);
             }
-                
-            _visitCounts = Json.JObjectToIntDictionary((Dictionary<string, object>)jObject["visitCounts"]);
-            _turnIndices = Json.JObjectToIntDictionary((Dictionary<string, object>)jObject["turnIndices"]);
 
-            currentTurnIndex = (int)jObject ["turnIdx"];
-            storySeed = (int)jObject ["storySeed"];
+            // Visit counts, turn indices, etc. are global
+            if (!ignoreGlobalState)
+            {
+                _visitCounts = Json.JObjectToIntDictionary((Dictionary<string, object>)jObject["visitCounts"]);
+                _turnIndices = Json.JObjectToIntDictionary((Dictionary<string, object>)jObject["turnIndices"]);
 
-            // Not optional, but bug in inkjs means it's actually missing in inkjs saves
-            object previousRandomObj = null;
-            if( jObject.TryGetValue("previousRandom", out previousRandomObj) ) {
-                previousRandom = (int)previousRandomObj;
-            } else {
-                previousRandom = 0;
+                currentTurnIndex = (int)jObject["turnIdx"];
+                storySeed = (int)jObject["storySeed"];
+
+                // Not optional, but bug in inkjs means it's actually missing in inkjs saves
+                object previousRandomObj = null;
+                if (jObject.TryGetValue("previousRandom", out previousRandomObj))
+                {
+                    previousRandom = (int)previousRandomObj;
+                }
+                else
+                {
+                    previousRandom = 0;
+                }
             }
 
 			object jChoiceThreadsObj = null;
